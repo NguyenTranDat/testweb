@@ -1,29 +1,9 @@
 const Sequelize = require('sequelize');
-// const { Op } = require("sequelize");
-
+const { Op } = require("sequelize");
 import followController from './followControler';
 import User from '../models/user';
-import penController from './penController';
 import Follow from '../models/followTable';
-
-// Add the missing function
-async function getFollowByUserID(user_id) {
-  try {
-    const getUser = await Follow.findAll({
-      where: { user_id_1: user_id },
-    });
-
-    if (getUser) {
-      const userIDs = getUser.map((user) => user.user_id_2);
-      return userIDs;
-    } else {
-      return [];
-    }
-  } catch (error) {
-    console.error('Get follow by id error:', error);
-    throw error;
-  }
-}
+import penController from './penController';
 
 async function getInfoUser(req, res) {
   try {
@@ -46,8 +26,8 @@ async function getInfoUser(req, res) {
       user_name: user.user_name,
       full_name: user.full_name,
       avatar_path: user.avatar_path,
-      location: user.location,  // Add location to the response
-      bio: user.bio,            // Add bio to the response
+      location: user.location,
+      bio: user.bio,
       followers_count,
       following_count,
     });
@@ -57,22 +37,22 @@ async function getInfoUser(req, res) {
   }
 }
 
-async function getUserByID(user_id) {
-  try {
-    const getOneUser = await User.findOne({
-      where: { user_id: user_id },
-    });
+// async function getUserByID(user_id) {
+//   try {
+//     const getOneUser = await User.findOne({
+//       where: { user_id: user_id },
+//     });
 
-    if (getOneUser) {
-      return getOneUser.user_id;
-    } else {
-      return 1;
-    }
-  } catch (error) {
-    console.error('Get user by id error:', error);
-    throw error;
-  }
-}
+//     if (getOneUser) {
+//       return getOneUser.user_id;
+//     } else {
+//       return 1;
+//     }
+//   } catch (error) {
+//     console.error('Get user by id error:', error);
+//     throw error;
+//   }
+// }
 
 async function countPenOfUser(arrUserID) {
   try {
@@ -95,19 +75,24 @@ async function countPenOfUser(arrUserID) {
   }
 }
 
-async function getAllUserExclude(arrUserID, user_id) {
+
+
+async function getAllUserExclude(arrUserID) {
   try {
     let users = await User.findAll({
+      attributes: {
+        exclude: ['gmail', 'password', 'createdAt', "updatedAt", "full_name", "location", "bio", "deleted", "isAdmin"],
+        include: [
+          [Sequelize.literal('(SELECT count(pen_id) FROM pen WHERE pen.user_id = user.user_id)'), 'numpen'],
+        ]
+      },
       where: {
         user_id: {
           [Sequelize.Op.notIn]: arrUserID
         },
-        [Sequelize.Op.not]: { user_id: user_id }, 
       },
-      attributes: ['user_id', 'user_name', 'avatar_path']
+      having: { numpen: { [Op.not]: 0 } },
     });
-
-    users = countPenOfUser(users);
 
     return users;
   } catch (error) {
@@ -116,26 +101,22 @@ async function getAllUserExclude(arrUserID, user_id) {
   }
 }
 
-async function getNotFollow(req, res) {
-  // console.log(1)
-  const user_id = req.params.id;
-  // console.log('abcxyy', user_id);
+// async function getNotFollow(req, res) {
+//   const user_id = req.params.id;
 
-  try {
-    const getOneUser = await getUserByID(user_id);
+//   try {
+//     const getOneUser = await getUserByID(user_id);
+//     let getFollowUsers = await followController._getFollowByUserID(getOneUser);
+//     // getFollowUsers = getFollowUsers.map(x => x.user_id_2)
+//     const getAllNotFollow = await getAllUserExclude(getFollowUsers, user_id);
+//     const uniqueNotFollow = [...new Set(getAllNotFollow)];
 
-    const getFollowUsers = await followController.getFollowByUserID(getOneUser);
-
-    const getAllNotFollow = await getAllUserExclude(getFollowUsers, user_id);
-
-    const uniqueNotFollow = [...new Set(getAllNotFollow)];
-
-    res.status(200).json(uniqueNotFollow);
-  } catch (error) {
-    console.error('Error fetching pen ids:', error);
-    throw error;
-  }
-}
+//     res.status(200).json(uniqueNotFollow);
+//   } catch (error) {
+//     console.error('Error fetching pen ids:', error);
+//     throw error;
+//   }
+// }
 
 async function updateProfile(req, res) {
   try {
@@ -233,65 +214,146 @@ async function changeEmail(req, res) {
   }
 }
 
-const Collection = require('../models/collection');
-const Pen = require('../models/pen'); 
-const ViewTable = require('../models/viewTable'); 
-const FollowTable = require('../models/followTable');
-const Pin = require('../models/pin');
-const LikeTable = require('../models/likeTable');
-const CommentTable = require('../models/commentTable');
+const Comment = require("../models/commentTable")
+const Collection = require("../models/collection")
+const Pen = require("../models/pen")
+const Project = require("../models/project")
+const LikeTable = require("../models/likeTable")
+const LikeCollectionTable = require("../models/likeCollection")
+const CollectionPen = require("../models/collection_pen")
+const ViewTable = require("../models/viewTable")
+const pinTable = require("../models/pin");
+async function removeOrRestoreUser(req, res) {
+  const { user_id, isDelete } = req.body;
 
-async function deleteUser(req, res) {
   try {
-    const user_id = req.params.id;
-    await FollowTable.destroy({
-      where: {
-        [Sequelize.Op.or]: [
-          { user_id_1: user_id },
-          { user_id_2: user_id },
-        ],
-      },
-    });
-    await CommentTable.destroy({
-      where: { pen_id: user_id },
-    });
-    await LikeTable.destroy({
-      where: { pen_id: user_id },
-    });
-    await Pin.destroy({
-      where: { pen_id: user_id },
-    });
-    
-    await ViewTable.destroy({
-      where: { pen_id: user_id },
-    });
-    await Collection.destroy({
-      where: { user_id },
-    });
-    await Pen.destroy({
-      where: { user_id },
-    });
+    // Update deleted status for comments
+    await Comment.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
 
-    const rowCount = await User.destroy({
-      where: { user_id },
+    // Update deleted status for collections
+    await Collection.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for pens
+    await Pen.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for projects
+    await Project.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for likes on pens and projects
+    await LikeTable.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for likes on collections
+    await LikeCollectionTable.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for relationships between collections and pens
+    await CollectionPen.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for views
+    await ViewTable.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for pinned items
+    await pinTable.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    // Update deleted status for the user
+    await User.update(
+      { deleted: isDelete },
+      { where: { user_id } }
+    );
+
+    res.status(200).json({
+      code: 200,
+      message: isDelete
+        ? 'User and associated records deleted successfully'
+        : 'User and associated records restored successfully',
     });
-
-    if (rowCount === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
-    console.error('Error deleting user:', error);
+    console.error('Error removing or restoring user:', error);
+    res.status(500).json({
+      code: 500,
+      error: 'Internal Server Error while removing or restoring user',
+    });
+  }
+}
+
+const _formatDateString = (dateString) => {
+  const date = new Date(dateString);
+  const formattedDate = date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'UTC',
+  });
+  return formattedDate;
+};
+
+async function getAlluser(req, res) {
+  const attr_sort = req.query.attr_sort
+  const order_by = req.query.order_by;
+  const deleted = req.query.deleted == '' ? false : (req.query.deleted == "true" ? true : false);
+
+  try {
+    let users = await User.findAll({
+      attributes: {
+        exclude: ['password',]
+      },
+      where: { deleted: deleted },
+      order: attr_sort != '' ? [[attr_sort, order_by || 'ASC']] : undefined,
+    });
+
+    users = users.map(user => ({
+      ...user.toJSON(),
+      createdAtRaw: user.createdAt,
+      updatedAtRaw: user.updatedAt,
+      createdAt: _formatDateString(user.createdAt),
+      updatedAt: _formatDateString(user.updatedAt),
+    }));
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.log("chan gai 808", error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }
 
 module.exports = {
-  getNotFollow,
+  // getNotFollow,
   getInfoUser,
   updateProfile,
   changeEmail,
   changeUsername,
-  deleteUser,
+  getAlluser,
+  _formatDateString,
+  getAllUserExclude,
+  removeOrRestoreUser,
+  removeOrRestoreUser,
 };

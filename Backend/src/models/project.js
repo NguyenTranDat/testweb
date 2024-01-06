@@ -1,17 +1,22 @@
-// models/collection.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('./sequelize');
-const User = require('./user');
+;
+import User from './user';
 
-const Collection = sequelize.define('collection', {
-  collection_id: {
+const Project = sequelize.define('project', {
+  project_id: {
     type: DataTypes.INTEGER,
-    autoIncrement: true,
     primaryKey: true,
+    allowNull: false,
+    autoIncrement: true,
   },
   name: {
     type: DataTypes.STRING,
-    defaultValue: "Untitled",
+    allowNull: true,
+  },
+  description: {
+    type: DataTypes.STRING,
+    allowNull: true
   },
   status: {
     type: DataTypes.STRING,
@@ -22,15 +27,12 @@ const Collection = sequelize.define('collection', {
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: false,
-  },
-  user_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
+  }
 }, {
-  tableName: 'collection',
+  tableName: 'project',
 });
 
-Collection.belongsTo(User, { foreignKey: 'user_id' });
 
-module.exports = Collection;
+Project.belongsTo(User, { foreignKey: 'user_id' });
+
+module.exports = Project;

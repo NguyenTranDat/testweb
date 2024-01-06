@@ -65,15 +65,14 @@ let signup = async (req, res) => {
       full_name,
       gmail,
       password,
+      location: 'Unknown',
     });
     newUser.password = undefined;
 
     res.status(200).json({ code: 200, data: newUser });
   } catch (error) {
     console.error('Signup error:', error);
-    res
-      .status(500)
-      .json({ error: 'An error occurred while signing up.' });
+    res.status(500).json({ code: 500, error: 'An error occurred while signing up.' });
   }
 };
 
@@ -107,9 +106,27 @@ let updatePassword = async (req, res) => {
   }
 };
 
+async function _checkUserWithGmail(gmail) {
+  try {
+    const x = await User.findOne({
+      where: { gmail: gmail },
+    });
+
+    if (x) {
+      await User.update({ password: 'Abc123456@' }, { where: { user_id: x.dataValues.user_id } });
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    return false;
+  }
+}
+
 module.exports = {
   login,
   signup,
   updatePassword,
+  _checkUserWithGmail
 };
 

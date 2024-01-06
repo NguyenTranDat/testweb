@@ -12,8 +12,6 @@ import Collection from '../models/collection';
 let updateView = async (req, res) => {
   try {
     const { userId, penId } = req.body;
-    // console.log(userId);
-    // console.log(penId);
     const [view, created] = await View.findOrCreate({
       where: {
         user_id: userId,
@@ -23,27 +21,27 @@ let updateView = async (req, res) => {
     });
 
     if (created) {
-      res.status(200).json({ message: "Thành công" });
+      res.status(200).json({ message: "Successful" });
     } else {
-      res.status(200).json({ message: "Đã xem trước đó" });
+      res.status(200).json({ message: "Seen" });
     }
   } catch (error) {
     console.error('Error updating view:', error);
-    res.status(500).json({ error: 'Lỗi khi cập nhật xem trước' });
+    res.status(500).json({ error: 'Error while updating view' });
   }
 }
 
 let handleLike = async (req, res) => {
-  const pen_id = req.query.pen_id;
-  const user_id = req.query.user_id;
-  const type = req.query.type;
+  const { pen_id, project_id, user_id, type } = req.query;
+
   try {
-    // Kiểm tra xem người dùng đã like pen đó chưa
+    // Kiểm tra xem người dùng đã like pen hoặc project đó chưa
     const existingLike = await Like.findOne({
       where: {
-        pen_id: pen_id,
-        user_id: user_id,
-        type: type
+        [Op.or]: [
+          (pen_id && { pen_id: pen_id, user_id: user_id, type: type }),
+          (project_id && { project_id: project_id, user_id: user_id, type: type })
+        ].filter(Boolean)
       }
     });
 
@@ -55,6 +53,7 @@ let handleLike = async (req, res) => {
       // Nếu chưa like, thêm mới (like)
       await Like.create({
         pen_id: pen_id,
+        project_id: project_id,
         user_id: user_id,
         type: type
       });
@@ -62,9 +61,10 @@ let handleLike = async (req, res) => {
     }
   } catch (error) {
     console.error(error);
-    throw new Error('Error handling like');
+    res.status(500).json({ error: 'Error handling like' });
   }
 }
+
 
 let _handlePinPen = async (user_id, pen_id) => {
   try {
@@ -78,7 +78,7 @@ let _handlePinPen = async (user_id, pen_id) => {
 
     if (existingPin) {
       await existingPin.destroy();
-      res.status(200).json({ pinned: false });
+      return false;
     } else {
       // Nếu chưa có trong Pin, thêm vào Pin
       await Pin.create({
@@ -86,7 +86,7 @@ let _handlePinPen = async (user_id, pen_id) => {
         pen_id: pen_id,
         type: "pen"
       });
-      res.status(200).json({ pinned: true });
+      return true;
     }
   } catch (error) {
     console.error(error);
@@ -96,7 +96,7 @@ let _handlePinPen = async (user_id, pen_id) => {
 
 let _handlePinCollection = async (user_id, collection_id) => {
   try {
-    const existingPin = await Collection.findOne({
+    const existingPin = await Pin.findOne({
       where: {
         user_id: user_id,
         collection_id: collection_id,
@@ -110,9 +110,9 @@ let _handlePinCollection = async (user_id, collection_id) => {
     } else {
       // Nếu chưa có trong Pin, thêm vào Pin
       await Pin.create({
-        user_id:user_id,
+        user_id: user_id,
         collection_id: collection_id,
-        type:"collection"
+        type: "collection"
       });
       return true;
     }
@@ -124,15 +124,15 @@ let _handlePinCollection = async (user_id, collection_id) => {
 
 
 let handlePin = async (req, res) => {
-  const { user_id, pen_id, type } = req.query;
+  const { user_id, id, type } = req.query;
 
   try {
 
     if (type == "pen") {
-      let x = await _handlePinPen(user_id, pen_id);
+      let x = await _handlePinPen(user_id, id);
       res.status(200).json({ pinned: x });
-    } else if(type == "collection") {
-      let x = await _handlePinCollection(user_id, pen_id);
+    } else if (type == "collection") {
+      let x = await _handlePinCollection(user_id, id);
       res.status(200).json({ pinned: x });
     }
   } catch (error) {
@@ -185,7 +185,6 @@ async function getInfoGrid(req, res) {
   const penId = req.query.pen_id;
   const user_id = req.query.user_id;
   try {
-    // console.log(penId);
     const pen = await Pen.findByPk(penId);
 
     if (!pen) {
@@ -227,7 +226,111 @@ async function getInfoGrid(req, res) {
   }
 }
 
+let handlePinPen = async (user_id, pen_id) => {
+  try {
+    const existingPin = await Pin.findOne({
+      where: {
+        user_id: user_id,
+        pen_id: pen_id,
+        type: "pen"
+      },
+    });
+
+    if (existingPin) {
+      await existingPin.destroy();
+      res.status(200).json({ pinned: false });
+    } else {
+      // Nếu chưa có trong Pin, thêm vào Pin
+      await Pin.create({
+        user_id: user_id,
+        pen_id: pen_id,
+        type: "pen"
+      });
+      res.status(200).json({ pinned: true });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+let handlePinCollection = async (user_id, collection_id) => {
+  try {
+    const existingPin = await Collection.findOne({
+      where: {
+        user_id: user_id,
+        collection_id: collection_id,
+        type: "collection"
+      },
+    });
+
+    if (existingPin) {
+      await existingPin.destroy();
+      return false;
+    } else {
+      // Nếu chưa có trong Pin, thêm vào Pin
+      await Pin.create({
+        user_id: user_id,
+        collection_id: collection_id,
+        type: "collection"
+      });
+      return true;
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+const checkFollowStatus = async (req, res) => {
+  const { user_id_1, user_id_2 } = req.query;
+
+  try {
+    const existingFollow = await Follow.findOne({
+      where: {
+        [Op.and]: [
+          { user_id_1 },
+          { user_id_2 },
+        ],
+      },
+    });
+
+    res.status(200).json({ followed: !!existingFollow });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+const checkLikeStatus = async (req, res) => {
+  const { pen_id, project_id, user_id, type } = req.query;
+
+  try {
+    const existingLike = await Like.findOne({
+      where: {
+        [Op.or]: [
+          (pen_id && { pen_id, user_id, type }),
+          (project_id && { project_id, user_id, type }),
+        ].filter(Boolean),
+      },
+    });
+
+    res.status(200).json({ liked: !!existingLike });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
 
 module.exports = {
-  updateView, handleLike, handlePin, handleFollow, getInfoGrid
+  updateView,
+  handleLike,
+  handlePin,
+  handleFollow,
+  getInfoGrid,
+  handlePinPen,
+  handlePinCollection,
+  checkFollowStatus,
+  checkLikeStatus,
 };
